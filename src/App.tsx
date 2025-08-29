@@ -7,6 +7,7 @@ import { InterviewProvider } from "@/lib/store.tsx";
 import AppShell from "@/components/AppShell";
 import Apply from "./pages/Apply";
 import Interview from "./pages/Interview";
+import Results from "./pages/Results";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -23,6 +24,7 @@ const App = () => (
               <Route path="/" element={<Apply />} />
               <Route path="/apply" element={<Apply />} />
               <Route path="/interview" element={<Interview />} />
+              <Route path="/results" element={<Results />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>

@@ -7,6 +7,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
+import { useInterview, interviewActions } from "@/lib/store.tsx";
+import { MicrophoneTest } from "./MicrophoneTest";
+import { InterviewSection } from "./InterviewSection";
+import { CompletionSummary } from "./CompletionSummary";
 
 interface DeviceInfo {
   deviceId: string;
@@ -14,7 +18,21 @@ interface DeviceInfo {
   kind: "videoinput" | "audioinput" | "audiooutput";
 }
 
+interface Message {
+  id: string;
+  type: 'ai' | 'user';
+  content: string;
+  timestamp: Date;
+}
+
+type InterviewPhase = "deviceSetup" | "micTest" | "interview" | "completion";
+
 export default function DeviceSetup() {
+  const { state } = useInterview();
+  const [currentPhase, setCurrentPhase] = useState<InterviewPhase>("deviceSetup");
+  const [interviewTranscript, setInterviewTranscript] = useState<Message[]>([]);
+  const [interviewDuration, setInterviewDuration] = useState(0);
+  
   const [devices, setDevices] = useState<DeviceInfo[]>([]);
   const [selectedCamera, setSelectedCamera] = useState<string>("");
   const [selectedMic, setSelectedMic] = useState<string>("");
@@ -229,18 +247,69 @@ export default function DeviceSetup() {
       return;
     }
 
-    // Simulate starting interview
-    toast({
-      title: "Interview Starting",
-      description: "Your AI interview session is beginning...",
-    });
+    setCurrentPhase("micTest");
+  };
+
+  const handleMicTestComplete = (passed: boolean) => {
+    if (passed) {
+      setCurrentPhase("interview");
+    }
+  };
+
+  const handleInterviewComplete = (transcript: Message[], duration: number) => {
+    setInterviewTranscript(transcript);
+    setInterviewDuration(duration);
+    setCurrentPhase("completion");
+  };
+
+  const handleRestart = () => {
+    setCurrentPhase("deviceSetup");
+    setInterviewTranscript([]);
+    setInterviewDuration(0);
   };
 
   const cameras = devices.filter(d => d.kind === "videoinput");
   const microphones = devices.filter(d => d.kind === "audioinput");
   const speakers = devices.filter(d => d.kind === "audiooutput");
 
-  return (
+  // Render different phases
+  const renderPhase = () => {
+    switch (currentPhase) {
+      case "micTest":
+        return <MicrophoneTest onTestComplete={handleMicTestComplete} />;
+      case "interview":
+        return state.application ? (
+          <InterviewSection
+            userData={{
+              firstName: state.application.firstName || '',
+              lastName: state.application.lastName || '',
+              email: state.application.email || '',
+              phone: state.application.phone || '',
+              position: state.application.position
+            }}
+            onComplete={handleInterviewComplete}
+          />
+        ) : null;
+      case "completion":
+        return state.application ? (
+          <CompletionSummary
+            userData={{
+              firstName: state.application.firstName || '',
+              lastName: state.application.lastName || '',
+              email: state.application.email || '',
+              phone: state.application.phone || ''
+            }}
+            transcript={interviewTranscript}
+            duration={interviewDuration}
+            onRestart={handleRestart}
+          />
+        ) : null;
+      default:
+        return renderDeviceSetup();
+    }
+  };
+
+  const renderDeviceSetup = () => (
     <div className="interview-container py-8">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Left Panel - Camera Preview */}
@@ -508,4 +577,6 @@ export default function DeviceSetup() {
       </div>
     </div>
   );
+
+  return <div className="min-h-screen bg-background">{renderPhase()}</div>;
 }
