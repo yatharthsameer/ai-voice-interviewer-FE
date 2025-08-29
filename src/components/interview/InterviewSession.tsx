@@ -36,6 +36,7 @@ export function InterviewSession() {
     totalQuestions,
     isConnected,
     connect,
+    retryConnection,
     startInterview,
     endInterview,
     setAudioOutputDevice,
@@ -175,6 +176,23 @@ export function InterviewSession() {
             animate={{ opacity: 1 }}
             transition={{ duration: 0.5 }}
           >
+            {/* Connection Error State */}
+            {interviewState === "error" && (
+              <motion.div
+                className="text-center space-y-4 mb-8"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+              >
+                <div className="text-red-400 text-lg font-medium">Connection Error</div>
+                <p className="text-muted-foreground max-w-md">
+                  Unable to connect to the interview service. Please check your internet connection.
+                </p>
+                <Button onClick={retryConnection} variant="outline">
+                  Retry Connection
+                </Button>
+              </motion.div>
+            )}
+
             {/* AI Avatar */}
             <AIAvatar interviewState={interviewState} />
 

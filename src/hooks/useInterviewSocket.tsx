@@ -49,6 +49,8 @@ export function useInterviewSocket() {
   const recognitionRef = useRef<any>(null);
   const synthRef = useRef<SpeechSynthesis | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const reconnectAttemptsRef = useRef<number>(0);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const { toast } = useToast();
 
   const WS_URL = process.env.NODE_ENV === 'production' 
@@ -78,6 +80,10 @@ export function useInterviewSocket() {
   }, []);
 
   const cleanup = useCallback(() => {
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
     if (wsRef.current) {
       wsRef.current.close();
       wsRef.current = null;
@@ -91,12 +97,27 @@ export function useInterviewSocket() {
   }, []);
 
   const connect = useCallback(() => {
+    // Clear any existing timeout
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+    
+    // Close existing connection if any
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+    
     setState("connecting");
+    console.log('Attempting WebSocket connection to:', WS_URL);
     
     try {
       wsRef.current = new WebSocket(WS_URL);
       
       wsRef.current.onopen = () => {
+        console.log('WebSocket connected successfully');
+        reconnectAttemptsRef.current = 0; // Reset retry counter on successful connection
         // Add small delay to ensure connection is fully established
         setTimeout(() => {
           setIsConnected(true);
@@ -113,27 +134,36 @@ export function useInterviewSocket() {
         }
       };
 
-      wsRef.current.onclose = () => {
+      wsRef.current.onclose = (event) => {
+        console.log('WebSocket closed. Code:', event.code, 'Reason:', event.reason);
         setIsConnected(false);
+        
         if (state !== "completed") {
-          setState("error");
-          toast({
-            title: "Connection Lost",
-            description: "Attempting to reconnect...",
-            variant: "destructive",
-          });
-          // Auto-reconnect after 2 seconds
-          setTimeout(() => connect(), 2000);
+          const maxRetries = 5;
+          const retryDelay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 10000); // Exponential backoff, max 10s
+          
+          if (reconnectAttemptsRef.current < maxRetries) {
+            setState("connecting");
+            reconnectAttemptsRef.current++;
+            console.log(`Reconnection attempt ${reconnectAttemptsRef.current}/${maxRetries} in ${retryDelay}ms`);
+            
+            reconnectTimeoutRef.current = setTimeout(() => {
+              connect();
+            }, retryDelay);
+          } else {
+            setState("error");
+            toast({
+              title: "Connection Failed",
+              description: "Unable to connect to interview service. Please refresh the page.",
+              variant: "destructive",
+            });
+          }
         }
       };
 
-      wsRef.current.onerror = () => {
+      wsRef.current.onerror = (error) => {
+        console.error('WebSocket error:', error);
         setState("error");
-        toast({
-          title: "Connection Error",
-          description: "Failed to connect to interview service.",
-          variant: "destructive",
-        });
       };
 
     } catch (error) {
@@ -299,6 +329,11 @@ export function useInterviewSocket() {
     }
   }, []);
 
+  const retryConnection = useCallback(() => {
+    reconnectAttemptsRef.current = 0; // Reset retry counter
+    connect();
+  }, [connect]);
+
   return {
     state,
     sessionId,
@@ -307,6 +342,7 @@ export function useInterviewSocket() {
     totalQuestions,
     isConnected,
     connect,
+    retryConnection,
     startInterview,
     endInterview,
     setAudioOutputDevice,
