@@ -1,6 +1,14 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 
+// Global WebSocket connection state to persist across component mounts
+let globalWs: WebSocket | null = null;
+let globalConnectionState: InterviewState = "connecting";
+let globalIsConnected = false;
+let globalSessionId = "";
+let globalReconnectAttempts = 0;
+let globalIsConnecting = false;
+
 export type InterviewState = 
   | "connecting" 
   | "ready" 
@@ -38,25 +46,42 @@ interface WebSocketMessage {
 }
 
 export function useInterviewSocket() {
-  const [state, setState] = useState<InterviewState>("connecting");
-  const [sessionId, setSessionId] = useState<string>("");
+  // Initialize state from global state
+  const [state, setState] = useState<InterviewState>(globalConnectionState);
+  const [sessionId, setSessionId] = useState<string>(globalSessionId);
   const [currentQuestion, setCurrentQuestion] = useState<string>("");
   const [questionNumber, setQuestionNumber] = useState<number>(0);
   const [totalQuestions, setTotalQuestions] = useState<number>(0);
-  const [isConnected, setIsConnected] = useState<boolean>(false);
+  const [isConnected, setIsConnected] = useState<boolean>(globalIsConnected);
   
-  const wsRef = useRef<WebSocket | null>(null);
+  const wsRef = useRef<WebSocket | null>(globalWs);
   const recognitionRef = useRef<any>(null);
   const synthRef = useRef<SpeechSynthesis | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const reconnectAttemptsRef = useRef<number>(0);
+  const reconnectAttemptsRef = useRef<number>(globalReconnectAttempts);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const isConnectingRef = useRef<boolean>(false); // Prevent multiple simultaneous connections
+  const isConnectingRef = useRef<boolean>(globalIsConnecting);
   const { toast } = useToast();
 
   const WS_URL = process.env.NODE_ENV === 'production' 
     ? `wss://${window.location.host}/ws`
     : 'ws://localhost:3000';
+
+  // Sync local state with global state
+  const updateState = useCallback((newState: InterviewState) => {
+    globalConnectionState = newState;
+    setState(newState);
+  }, []);
+
+  const updateIsConnected = useCallback((connected: boolean) => {
+    globalIsConnected = connected;
+    setIsConnected(connected);
+  }, []);
+
+  const updateSessionId = useCallback((id: string) => {
+    globalSessionId = id;
+    setSessionId(id);
+  }, []);
 
   // Initialize speech recognition
   useEffect(() => {
@@ -80,18 +105,23 @@ export function useInterviewSocket() {
     return () => cleanup();
   }, []);
 
-  const cleanup = useCallback(() => {
-    console.log('Cleaning up WebSocket connection...');
-    isConnectingRef.current = false;
+  const cleanup = useCallback((force = false) => {
+    console.log('Cleaning up WebSocket connection...', force ? '(forced)' : '(component unmount)');
     
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
       reconnectTimeoutRef.current = null;
     }
-    if (wsRef.current) {
+    
+    // Only close WebSocket if forced (e.g., on app close) or if there are errors
+    if (force && wsRef.current) {
+      console.log('Force closing WebSocket connection...');
       wsRef.current.close();
       wsRef.current = null;
+      globalWs = null;
+      globalIsConnecting = false;
     }
+    
     if (recognitionRef.current) {
       recognitionRef.current.stop();
     }
@@ -101,12 +131,23 @@ export function useInterviewSocket() {
   }, []);
 
   const connect = useCallback(() => {
-    // Prevent multiple simultaneous connection attempts
-    if (isConnectingRef.current) {
-      console.log('Connection attempt already in progress, skipping...');
+    // If already connected, just sync state
+    if (globalWs && globalWs.readyState === WebSocket.OPEN) {
+      console.log('Using existing WebSocket connection');
+      wsRef.current = globalWs;
+      updateState(globalConnectionState);
+      updateIsConnected(globalIsConnected);
+      updateSessionId(globalSessionId);
       return;
     }
     
+    // Prevent multiple simultaneous connection attempts
+    if (globalIsConnecting) {
+      console.log('Connection attempt already in progress globally, skipping...');
+      return;
+    }
+    
+    globalIsConnecting = true;
     isConnectingRef.current = true;
     
     // Clear any existing timeout
@@ -116,30 +157,34 @@ export function useInterviewSocket() {
     }
     
     // Close existing connection if any
-    if (wsRef.current) {
+    if (globalWs) {
       console.log('Closing existing WebSocket connection...');
-      wsRef.current.close();
-      wsRef.current = null;
+      globalWs.close();
+      globalWs = null;
     }
     
-    setState("connecting");
+    updateState("connecting");
     console.log('Attempting WebSocket connection to:', WS_URL);
     
     try {
-      wsRef.current = new WebSocket(WS_URL);
+      const ws = new WebSocket(WS_URL);
+      wsRef.current = ws;
+      globalWs = ws;
       
-      wsRef.current.onopen = () => {
+      ws.onopen = () => {
         console.log('WebSocket connected successfully');
-        isConnectingRef.current = false; // Reset connecting flag
-        reconnectAttemptsRef.current = 0; // Reset retry counter on successful connection
+        globalIsConnecting = false;
+        isConnectingRef.current = false;
+        globalReconnectAttempts = 0;
+        reconnectAttemptsRef.current = 0;
         // Add small delay to ensure connection is fully established
         setTimeout(() => {
-          setIsConnected(true);
-          setState("ready");
+          updateIsConnected(true);
+          updateState("ready");
         }, 50);
       };
 
-      wsRef.current.onmessage = (event) => {
+      ws.onmessage = (event) => {
         try {
           const message: WebSocketMessage = JSON.parse(event.data);
           handleWebSocketMessage(message);
@@ -148,25 +193,27 @@ export function useInterviewSocket() {
         }
       };
 
-      wsRef.current.onclose = (event) => {
+      ws.onclose = (event) => {
         console.log('WebSocket closed. Code:', event.code, 'Reason:', event.reason);
-        isConnectingRef.current = false; // Reset connecting flag
-        setIsConnected(false);
+        globalIsConnecting = false;
+        isConnectingRef.current = false;
+        updateIsConnected(false);
         
-        if (state !== "completed") {
+        if (globalConnectionState !== "completed") {
           const maxRetries = 5;
-          const retryDelay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 10000); // Exponential backoff, max 10s
+          const retryDelay = Math.min(1000 * Math.pow(2, globalReconnectAttempts), 10000);
           
-          if (reconnectAttemptsRef.current < maxRetries) {
-            setState("connecting");
-            reconnectAttemptsRef.current++;
-            console.log(`Reconnection attempt ${reconnectAttemptsRef.current}/${maxRetries} in ${retryDelay}ms`);
+          if (globalReconnectAttempts < maxRetries) {
+            updateState("connecting");
+            globalReconnectAttempts++;
+            reconnectAttemptsRef.current = globalReconnectAttempts;
+            console.log(`Reconnection attempt ${globalReconnectAttempts}/${maxRetries} in ${retryDelay}ms`);
             
             reconnectTimeoutRef.current = setTimeout(() => {
               connect();
             }, retryDelay);
           } else {
-            setState("error");
+            updateState("error");
             toast({
               title: "Connection Failed",
               description: "Unable to connect to interview service. Please refresh the page.",
@@ -176,23 +223,25 @@ export function useInterviewSocket() {
         }
       };
 
-      wsRef.current.onerror = (error) => {
+      ws.onerror = (error) => {
         console.error('WebSocket error:', error);
-        isConnectingRef.current = false; // Reset connecting flag on error
-        setState("error");
+        globalIsConnecting = false;
+        isConnectingRef.current = false;
+        updateState("error");
       };
 
     } catch (error) {
-      isConnectingRef.current = false; // Reset connecting flag on error
-      setState("error");
+      globalIsConnecting = false;
+      isConnectingRef.current = false;
+      updateState("error");
       console.error("WebSocket connection failed:", error);
     }
-  }, [state, WS_URL]);
+  }, [updateState, updateIsConnected, updateSessionId]);
 
   const handleWebSocketMessage = useCallback((message: WebSocketMessage) => {
     switch (message.type) {
       case "connection":
-        setSessionId(message.sessionId || "");
+        updateSessionId(message.sessionId || "");
         break;
         
       case "interview_started":
@@ -209,14 +258,14 @@ export function useInterviewSocket() {
         break;
         
       case "interview_completed":
-        setState("completed");
+        updateState("completed");
         if (message.summary?.finalFeedback) {
           playAIResponse(message.summary.finalFeedback, message.audioUrl);
         }
         break;
         
       case "error":
-        setState("error");
+        updateState("error");
         toast({
           title: "Interview Error",
           description: message.message || "An error occurred during the interview.",
@@ -224,10 +273,10 @@ export function useInterviewSocket() {
         });
         break;
     }
-  }, []);
+  }, [updateState, updateSessionId, toast]);
 
   const playAIResponse = useCallback(async (text: string, audioUrl?: string) => {
-    setState("aiSpeaking");
+    updateState("aiSpeaking");
     
     try {
       if (audioUrl && audioRef.current) {
@@ -255,12 +304,12 @@ export function useInterviewSocket() {
       console.error("Failed to play AI response:", error);
       setTimeout(() => startListening(), 800);
     }
-  }, []);
+  }, [updateState]);
 
   const startListening = useCallback(() => {
     if (!recognitionRef.current) return;
     
-    setState("listening");
+    updateState("listening");
     
     recognitionRef.current.onresult = (event) => {
       const transcript = Array.from(event.results)
@@ -274,7 +323,7 @@ export function useInterviewSocket() {
 
     recognitionRef.current.onerror = (event) => {
       console.error("Speech recognition error:", event.error);
-      setState("error");
+      updateState("error");
       toast({
         title: "Speech Recognition Error",
         description: "Please try speaking again or check your microphone.",
@@ -287,12 +336,12 @@ export function useInterviewSocket() {
     } catch (error) {
       console.error("Failed to start speech recognition:", error);
     }
-  }, []);
+  }, [updateState, toast]);
 
   const sendUserResponse = useCallback((response: string) => {
     if (!wsRef.current || !response.trim() || wsRef.current.readyState !== WebSocket.OPEN) return;
     
-    setState("sending");
+    updateState("sending");
     
     const message = {
       type: "user_response",
@@ -303,8 +352,8 @@ export function useInterviewSocket() {
     };
     
     wsRef.current.send(JSON.stringify(message));
-    setState("waitingBackend");
-  }, [questionNumber]);
+    updateState("waitingBackend");
+  }, [questionNumber, updateState]);
 
   const startInterview = useCallback((userData: UserData, interviewType: InterviewType = "general") => {
     if (!wsRef.current || !isConnected || wsRef.current.readyState !== WebSocket.OPEN) {
@@ -333,8 +382,8 @@ export function useInterviewSocket() {
     };
     
     wsRef.current.send(JSON.stringify(message));
-    setState("completed");
-  }, [sessionId]);
+    updateState("completed");
+  }, [sessionId, updateState]);
 
   const setAudioOutputDevice = useCallback(async (deviceId: string) => {
     if (audioRef.current && 'setSinkId' in audioRef.current) {
@@ -348,8 +397,10 @@ export function useInterviewSocket() {
 
   const retryConnection = useCallback(() => {
     console.log('Manual retry connection requested...');
-    reconnectAttemptsRef.current = 0; // Reset retry counter
-    isConnectingRef.current = false; // Reset connecting flag
+    globalReconnectAttempts = 0;
+    reconnectAttemptsRef.current = 0;
+    globalIsConnecting = false;
+    isConnectingRef.current = false;
     connect();
   }, [connect]);
 
