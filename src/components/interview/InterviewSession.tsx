@@ -70,7 +70,7 @@ export function InterviewSession() {
     };
   }, [state.isApplicationComplete, state.application, navigate, toast, connect, cleanup]);
 
-  // Auto-start interview when connected
+  // Auto-start interview when connected (with small delay to ensure WebSocket is ready)
   useEffect(() => {
     if (isConnected && state.application && interviewState === "ready") {
       const userData = {
@@ -90,7 +90,10 @@ export function InterviewSession() {
         interviewType = "leadership";
       }
 
-      startInterview(userData, interviewType);
+      // Add small delay to ensure WebSocket is fully ready
+      setTimeout(() => {
+        startInterview(userData, interviewType);
+      }, 100);
     }
   }, [isConnected, state.application, interviewState, startInterview]);
 

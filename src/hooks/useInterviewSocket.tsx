@@ -97,8 +97,11 @@ export function useInterviewSocket() {
       wsRef.current = new WebSocket(WS_URL);
       
       wsRef.current.onopen = () => {
-        setIsConnected(true);
-        setState("ready");
+        // Add small delay to ensure connection is fully established
+        setTimeout(() => {
+          setIsConnected(true);
+          setState("ready");
+        }, 50);
       };
 
       wsRef.current.onmessage = (event) => {
@@ -240,7 +243,7 @@ export function useInterviewSocket() {
   }, []);
 
   const sendUserResponse = useCallback((response: string) => {
-    if (!wsRef.current || !response.trim()) return;
+    if (!wsRef.current || !response.trim() || wsRef.current.readyState !== WebSocket.OPEN) return;
     
     setState("sending");
     
@@ -257,7 +260,10 @@ export function useInterviewSocket() {
   }, [questionNumber]);
 
   const startInterview = useCallback((userData: UserData, interviewType: InterviewType = "general") => {
-    if (!wsRef.current || !isConnected) return;
+    if (!wsRef.current || !isConnected || wsRef.current.readyState !== WebSocket.OPEN) {
+      console.warn('WebSocket not ready for sending messages. ReadyState:', wsRef.current?.readyState);
+      return;
+    }
     
     const message = {
       type: "start_interview",
@@ -272,7 +278,7 @@ export function useInterviewSocket() {
   }, [isConnected]);
 
   const endInterview = useCallback(() => {
-    if (!wsRef.current || !sessionId) return;
+    if (!wsRef.current || !sessionId || wsRef.current.readyState !== WebSocket.OPEN) return;
     
     const message = {
       type: "end_interview",
