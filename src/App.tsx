@@ -8,6 +8,7 @@ import AppShell from "@/components/AppShell";
 import Apply from "./pages/Apply";
 import Interview from "./pages/Interview";
 import Results from "./pages/Results";
+import ThankYou from "./pages/ThankYou";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -25,6 +26,7 @@ const App = () => (
               <Route path="/apply" element={<Apply />} />
               <Route path="/interview" element={<Interview />} />
               <Route path="/results" element={<Results />} />
+              <Route path="/thank-you" element={<ThankYou />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>
