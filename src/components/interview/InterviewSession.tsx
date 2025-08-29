@@ -54,7 +54,10 @@ export function InterviewSession() {
 
   // Connect and start interview on mount
   useEffect(() => {
+    console.log('InterviewSession: Component mounted, checking application state...');
+    
     if (!state.isApplicationComplete || !state.application) {
+      console.log('InterviewSession: Application not complete, redirecting...');
       toast({
         title: "Application Required",
         description: "Please complete your application first.",
@@ -64,9 +67,11 @@ export function InterviewSession() {
       return;
     }
 
+    console.log('InterviewSession: Application complete, initializing WebSocket connection...');
     connect();
 
     return () => {
+      console.log('InterviewSession: Cleaning up on unmount...');
       cleanup();
     };
   }, [state.isApplicationComplete, state.application, navigate, toast, connect, cleanup]);

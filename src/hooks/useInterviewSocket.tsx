@@ -51,6 +51,7 @@ export function useInterviewSocket() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const reconnectAttemptsRef = useRef<number>(0);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isConnectingRef = useRef<boolean>(false); // Prevent multiple simultaneous connections
   const { toast } = useToast();
 
   const WS_URL = process.env.NODE_ENV === 'production' 
@@ -80,6 +81,9 @@ export function useInterviewSocket() {
   }, []);
 
   const cleanup = useCallback(() => {
+    console.log('Cleaning up WebSocket connection...');
+    isConnectingRef.current = false;
+    
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
       reconnectTimeoutRef.current = null;
@@ -97,6 +101,14 @@ export function useInterviewSocket() {
   }, []);
 
   const connect = useCallback(() => {
+    // Prevent multiple simultaneous connection attempts
+    if (isConnectingRef.current) {
+      console.log('Connection attempt already in progress, skipping...');
+      return;
+    }
+    
+    isConnectingRef.current = true;
+    
     // Clear any existing timeout
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
@@ -105,6 +117,7 @@ export function useInterviewSocket() {
     
     // Close existing connection if any
     if (wsRef.current) {
+      console.log('Closing existing WebSocket connection...');
       wsRef.current.close();
       wsRef.current = null;
     }
@@ -117,6 +130,7 @@ export function useInterviewSocket() {
       
       wsRef.current.onopen = () => {
         console.log('WebSocket connected successfully');
+        isConnectingRef.current = false; // Reset connecting flag
         reconnectAttemptsRef.current = 0; // Reset retry counter on successful connection
         // Add small delay to ensure connection is fully established
         setTimeout(() => {
@@ -136,6 +150,7 @@ export function useInterviewSocket() {
 
       wsRef.current.onclose = (event) => {
         console.log('WebSocket closed. Code:', event.code, 'Reason:', event.reason);
+        isConnectingRef.current = false; // Reset connecting flag
         setIsConnected(false);
         
         if (state !== "completed") {
@@ -163,10 +178,12 @@ export function useInterviewSocket() {
 
       wsRef.current.onerror = (error) => {
         console.error('WebSocket error:', error);
+        isConnectingRef.current = false; // Reset connecting flag on error
         setState("error");
       };
 
     } catch (error) {
+      isConnectingRef.current = false; // Reset connecting flag on error
       setState("error");
       console.error("WebSocket connection failed:", error);
     }
@@ -330,7 +347,9 @@ export function useInterviewSocket() {
   }, []);
 
   const retryConnection = useCallback(() => {
+    console.log('Manual retry connection requested...');
     reconnectAttemptsRef.current = 0; // Reset retry counter
+    isConnectingRef.current = false; // Reset connecting flag
     connect();
   }, [connect]);
 
