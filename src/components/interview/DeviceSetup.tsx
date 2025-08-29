@@ -8,9 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { useInterview, interviewActions } from "@/lib/store.tsx";
-import { MicrophoneTest } from "./MicrophoneTest";
-import { InterviewSection } from "./InterviewSection";
-import { CompletionSummary } from "./CompletionSummary";
+// Removed old imports - using new InterviewSession flow
 
 interface DeviceInfo {
   deviceId: string;
@@ -18,14 +16,9 @@ interface DeviceInfo {
   kind: "videoinput" | "audioinput" | "audiooutput";
 }
 
-interface Message {
-  id: string;
-  type: 'ai' | 'user';
-  content: string;
-  timestamp: Date;
-}
+// Removed unused Message interface
 
-type InterviewPhase = "deviceSetup" | "micTest" | "interview" | "completion";
+type InterviewPhase = "deviceSetup"; // Simplified - only device setup phase
 
 interface DeviceSetupProps {
   onStartInterview?: () => void;
@@ -33,9 +26,7 @@ interface DeviceSetupProps {
 
 export default function DeviceSetup({ onStartInterview }: DeviceSetupProps) {
   const { state } = useInterview();
-  const [currentPhase, setCurrentPhase] = useState<InterviewPhase>("deviceSetup");
-  const [interviewTranscript, setInterviewTranscript] = useState<Message[]>([]);
-  const [interviewDuration, setInterviewDuration] = useState(0);
+  // Simplified state - only device setup needed
   
   const [devices, setDevices] = useState<DeviceInfo[]>([]);
   const [selectedCamera, setSelectedCamera] = useState<string>("");
@@ -254,68 +245,18 @@ export default function DeviceSetup({ onStartInterview }: DeviceSetupProps) {
     // Call the parent callback to move to interview session
     if (onStartInterview) {
       onStartInterview();
-    } else {
-      setCurrentPhase("micTest");
     }
   };
 
-  const handleMicTestComplete = (passed: boolean) => {
-    if (passed) {
-      setCurrentPhase("interview");
-    }
-  };
-
-  const handleInterviewComplete = (transcript: Message[], duration: number) => {
-    setInterviewTranscript(transcript);
-    setInterviewDuration(duration);
-    setCurrentPhase("completion");
-  };
-
-  const handleRestart = () => {
-    setCurrentPhase("deviceSetup");
-    setInterviewTranscript([]);
-    setInterviewDuration(0);
-  };
+  // Removed unused handlers - handled by InterviewSession now
 
   const cameras = devices.filter(d => d.kind === "videoinput");
   const microphones = devices.filter(d => d.kind === "audioinput");
   const speakers = devices.filter(d => d.kind === "audiooutput");
 
-  // Render different phases
+  // Only render device setup - other phases handled by InterviewSession
   const renderPhase = () => {
-    switch (currentPhase) {
-      case "micTest":
-        return <MicrophoneTest onTestComplete={handleMicTestComplete} />;
-      case "interview":
-        return state.application ? (
-          <InterviewSection
-            userData={{
-              firstName: state.application.firstName || '',
-              lastName: state.application.lastName || '',
-              email: state.application.email || '',
-              phone: state.application.phone || '',
-              position: state.application.position
-            }}
-            onComplete={handleInterviewComplete}
-          />
-        ) : null;
-      case "completion":
-        return state.application ? (
-          <CompletionSummary
-            userData={{
-              firstName: state.application.firstName || '',
-              lastName: state.application.lastName || '',
-              email: state.application.email || '',
-              phone: state.application.phone || ''
-            }}
-            transcript={interviewTranscript}
-            duration={interviewDuration}
-            onRestart={handleRestart}
-          />
-        ) : null;
-      default:
-        return renderDeviceSetup();
-    }
+    return renderDeviceSetup();
   };
 
   const renderDeviceSetup = () => (
