@@ -27,7 +27,11 @@ interface Message {
 
 type InterviewPhase = "deviceSetup" | "micTest" | "interview" | "completion";
 
-export default function DeviceSetup() {
+interface DeviceSetupProps {
+  onStartInterview?: () => void;
+}
+
+export default function DeviceSetup({ onStartInterview }: DeviceSetupProps) {
   const { state } = useInterview();
   const [currentPhase, setCurrentPhase] = useState<InterviewPhase>("deviceSetup");
   const [interviewTranscript, setInterviewTranscript] = useState<Message[]>([]);
@@ -247,7 +251,12 @@ export default function DeviceSetup() {
       return;
     }
 
-    setCurrentPhase("micTest");
+    // Call the parent callback to move to interview session
+    if (onStartInterview) {
+      onStartInterview();
+    } else {
+      setCurrentPhase("micTest");
+    }
   };
 
   const handleMicTestComplete = (passed: boolean) => {

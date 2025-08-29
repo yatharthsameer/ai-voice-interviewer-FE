@@ -44,8 +44,8 @@ interface SpeechRecognitionStatic {
 
 declare global {
   interface Window {
-    SpeechRecognition?: SpeechRecognitionStatic;
-    webkitSpeechRecognition?: SpeechRecognitionStatic;
+    SpeechRecognition?: any;
+    webkitSpeechRecognition?: any;
   }
 }
 
@@ -648,8 +648,7 @@ export function InterviewSection({ userData, onComplete }: InterviewSectionProps
             <div className="flex-shrink-0 flex justify-center">
               <div className="text-center">
                 <AIAvatar 
-                  isListening={isListening} 
-                  isSpeaking={isAISpeaking}
+                  interviewState={isListening ? "listening" : isAISpeaking ? "aiSpeaking" : "ready"}
                   className={`w-24 h-24 sm:w-40 sm:h-40 ${isMobile ? 'w-24 h-24' : 'w-40 h-40'}`}
                 />
                 <div className="mt-4 space-y-2">

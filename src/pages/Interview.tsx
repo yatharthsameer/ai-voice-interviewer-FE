@@ -1,32 +1,21 @@
-import { useEffect } from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useInterview, interviewActions } from "@/lib/store.tsx";
-import { useToast } from "@/hooks/use-toast";
 import DeviceSetup from "@/components/interview/DeviceSetup";
+import { InterviewSession } from "@/components/interview/InterviewSession";
 
 export default function Interview() {
-  const { state, dispatch } = useInterview();
-  const navigate = useNavigate();
-  const { toast } = useToast();
+  const { state } = useInterview();
+  const [showDeviceSetup, setShowDeviceSetup] = useState(true);
 
-  useEffect(() => {
-    // Check if application is complete
-    if (!state.isApplicationComplete || !state.application) {
-      toast({
-        title: "Application Required",
-        description: "Please complete your application first.",
-        variant: "destructive",
-      });
-      navigate("/");
-      return;
-    }
+  const handleStartInterview = () => {
+    setShowDeviceSetup(false);
+  };
 
-    dispatch(interviewActions.setStep(2));
-  }, [state.isApplicationComplete, state.application, dispatch, navigate, toast]);
-
-  if (!state.isApplicationComplete || !state.application) {
-    return null; // Will redirect
+  // Show device setup first, then interview session
+  if (showDeviceSetup) {
+    return <DeviceSetup onStartInterview={handleStartInterview} />;
   }
 
-  return <DeviceSetup />;
+  return <InterviewSession />;
 }
