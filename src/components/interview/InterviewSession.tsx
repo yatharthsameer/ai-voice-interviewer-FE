@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Settings, X } from "lucide-react";
+import { Mic, MicOff, Video, VideoOff, Settings, PhoneOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useInterview } from "@/lib/store";
-import { useInterviewSocket, InterviewType } from "@/hooks/useInterviewSocket";
+import { useSimpleInterview, InterviewState } from "@/hooks/useSimpleInterview";
 import { AIAvatar } from "./AIAvatar";
 import { SelfView } from "./SelfView";
 import { DeviceSettingsModal } from "./DeviceSettingsModal";
@@ -33,15 +33,12 @@ export function InterviewSession() {
     sessionId,
     currentQuestion,
     questionNumber,
-    totalQuestions,
     isConnected,
     connect,
-    retryConnection,
     startInterview,
     endInterview,
-    setAudioOutputDevice,
-    cleanup
-  } = useInterviewSocket();
+    disconnect
+  } = useSimpleInterview(navigate);
 
   // Load saved device preferences
   useEffect(() => {
@@ -72,9 +69,9 @@ export function InterviewSession() {
 
     return () => {
       console.log('InterviewSession: Cleaning up on unmount...');
-      cleanup();
+      disconnect();
     };
-  }, [state.isApplicationComplete, state.application, navigate, toast, connect, cleanup]);
+  }, [state.isApplicationComplete, state.application, navigate, toast, connect, disconnect]);
 
   // Auto-start interview when connected (with small delay to ensure WebSocket is ready)
   useEffect(() => {
@@ -87,28 +84,12 @@ export function InterviewSession() {
         position: state.application.position || ''
       };
 
-      // Determine interview type based on position
-      let interviewType: InterviewType = "general";
-      const position = state.application.position?.toLowerCase();
-      if (position?.includes("nurse")) {
-        interviewType = "technical";
-      } else if (position?.includes("therapist")) {
-        interviewType = "leadership";
-      }
-
       // Add small delay to ensure WebSocket is fully ready
       setTimeout(() => {
-        startInterview(userData, interviewType);
+        startInterview(userData, "general");
       }, 100);
     }
   }, [isConnected, state.application, interviewState, startInterview]);
-
-  // Update speaker device when selection changes
-  useEffect(() => {
-    if (selectedSpeakerId) {
-      setAudioOutputDevice(selectedSpeakerId);
-    }
-  }, [selectedSpeakerId, setAudioOutputDevice]);
 
   const handleEndInterview = () => {
     endInterview();
@@ -119,13 +100,8 @@ export function InterviewSession() {
     navigate("/");
   };
 
-  const handleCameraChange = (deviceId: string) => {
-    setSelectedCameraId(deviceId);
-  };
-
-  const handleSpeakerChange = (deviceId: string) => {
-    setSelectedSpeakerId(deviceId);
-  };
+  const [isMuted, setIsMuted] = useState(false);
+  const [isCameraOff, setIsCameraOff] = useState(false);
 
   // Redirect if no application
   if (!state.isApplicationComplete || !state.application) {
@@ -133,24 +109,134 @@ export function InterviewSession() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b border-border">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            {/* Logo placeholder */}
-            <div className="flex items-center">
-              <div className="w-8 h-8 bg-brand rounded-lg flex items-center justify-center">
-                <span className="text-brand-foreground font-bold text-sm">AI</span>
-              </div>
+    <div className="min-h-screen bg-green-600 relative overflow-hidden">
+      {/* Main Content - Google Meet Style */}
+      <main className="flex-1 relative">
+        <div className="flex flex-col items-center justify-center min-h-screen space-y-8">
+          {/* Centered Avatar */}
+          <motion.div
+            className="flex flex-col items-center space-y-4"
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.5 }}
+          >
+            {/* Large Circular Avatar */}
+            <div className="relative">
+              <motion.div
+                className="w-48 h-48 bg-green-500 rounded-full flex items-center justify-center shadow-2xl"
+                animate={{
+                  scale: interviewState === "speaking" ? 1.05 : interviewState === "listening" ? 1.02 : 1,
+                }}
+                transition={{ duration: 0.3 }}
+              >
+                <span className="text-white text-6xl font-semibold">
+                  {state.application?.firstName?.charAt(0)?.toUpperCase() || "A"}
+                </span>
+              </motion.div>
+              
+              {/* Status indicator ring */}
+              {(interviewState === "speaking" || interviewState === "listening") && (
+                <motion.div
+                  className={`absolute inset-0 rounded-full border-4 ${
+                    interviewState === "speaking" ? "border-white" : "border-green-300"
+                  }`}
+                  animate={{ scale: [1, 1.1, 1] }}
+                  transition={{ duration: 2, repeat: Infinity }}
+                />
+              )}
             </div>
+
+            {/* User Name */}
+            <div className="text-center">
+              <h2 className="text-white text-2xl font-semibold">
+                {state.application?.firstName} {state.application?.lastName}
+              </h2>
+              
+              {/* Status Text */}
+              <p className="text-green-100 text-lg mt-2">
+                {interviewState === "connecting" && "Connecting..."}
+                {interviewState === "ready" && "Ready to begin"}
+                {interviewState === "speaking" && "AI is speaking"}
+                {interviewState === "listening" && "Listening..."}
+                {interviewState === "interviewing" && "Interview in progress"}
+                {interviewState === "completed" && "Interview completed"}
+                {interviewState === "error" && "Connection error"}
+              </p>
+            </div>
+          </motion.div>
+        </div>
+      </main>
+
+      {/* Self View Video - Bottom Right */}
+      <div className="fixed bottom-20 right-4 md:bottom-24 md:right-6 z-10">
+        <motion.div
+          className="w-32 h-24 md:w-40 md:h-28 bg-gray-900 rounded-lg overflow-hidden shadow-lg border-2 border-white/20"
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.3 }}
+        >
+          <SelfView selectedCameraId={selectedCameraId} className="w-full h-full" />
+          <div className="absolute bottom-1 left-1 text-white text-xs bg-black/50 px-1 rounded">
+            {state.application?.firstName}
+          </div>
+        </motion.div>
+      </div>
+
+      {/* Bottom Control Bar - Google Meet Style */}
+      <div className="fixed bottom-0 left-0 right-0 bg-gray-900/95 backdrop-blur-sm border-t border-gray-700">
+        <div className="flex items-center justify-center py-4 px-4">
+          <div className="flex items-center space-x-4">
+            {/* Mute Button */}
+            <Button
+              variant="ghost"
+              size="lg"
+              className={`w-12 h-12 rounded-full ${
+                isMuted 
+                  ? "bg-red-600 hover:bg-red-700 text-white" 
+                  : "bg-gray-700 hover:bg-gray-600 text-white"
+              }`}
+              onClick={() => setIsMuted(!isMuted)}
+            >
+              {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+            </Button>
+
+            {/* Camera Button */}
+            <Button
+              variant="ghost"
+              size="lg"
+              className={`w-12 h-12 rounded-full ${
+                isCameraOff 
+                  ? "bg-red-600 hover:bg-red-700 text-white" 
+                  : "bg-gray-700 hover:bg-gray-600 text-white"
+              }`}
+              onClick={() => setIsCameraOff(!isCameraOff)}
+            >
+              {isCameraOff ? <VideoOff className="w-5 h-5" /> : <Video className="w-5 h-5" />}
+            </Button>
+
+            {/* Settings Button */}
+            <DeviceSettingsModal
+              onCameraChange={(deviceId) => setSelectedCameraId(deviceId)}
+              onSpeakerChange={(deviceId) => setSelectedSpeakerId(deviceId)}
+            >
+              <Button
+                variant="ghost"
+                size="lg"
+                className="w-12 h-12 rounded-full bg-gray-700 hover:bg-gray-600 text-white"
+              >
+                <Settings className="w-5 h-5" />
+              </Button>
+            </DeviceSettingsModal>
 
             {/* End Interview Button */}
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button variant="ghost" size="sm">
-                  <X className="w-4 h-4 mr-2" />
-                  End Interview
+                <Button
+                  variant="ghost"
+                  size="lg"
+                  className="w-12 h-12 rounded-full bg-red-600 hover:bg-red-700 text-white"
+                >
+                  <PhoneOff className="w-5 h-5" />
                 </Button>
               </AlertDialogTrigger>
               <AlertDialogContent>
@@ -170,90 +256,7 @@ export function InterviewSession() {
             </AlertDialog>
           </div>
         </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="flex-1">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <motion.div
-            className="flex flex-col items-center justify-center min-h-[calc(100vh-12rem)] space-y-8"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.5 }}
-          >
-            {/* Connection Error State */}
-            {interviewState === "error" && (
-              <motion.div
-                className="text-center space-y-4 mb-8"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-              >
-                <div className="text-red-400 text-lg font-medium">Connection Error</div>
-                <p className="text-muted-foreground max-w-md">
-                  Unable to connect to the interview service. Please check your internet connection.
-                </p>
-                <Button onClick={retryConnection} variant="outline">
-                  Retry Connection
-                </Button>
-              </motion.div>
-            )}
-
-            {/* AI Avatar */}
-            <AIAvatar interviewState={interviewState} />
-
-            {/* Current Question Display (when AI is speaking) */}
-            {currentQuestion && interviewState === "aiSpeaking" && (
-              <motion.div
-                className="max-w-2xl text-center"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
-              >
-                <p className="text-muted-foreground text-sm mb-2">
-                  Question {questionNumber} of {totalQuestions}
-                </p>
-                <p className="text-lg text-foreground leading-relaxed">
-                  {currentQuestion}
-                </p>
-              </motion.div>
-            )}
-
-            {/* Interview Type Badge */}
-            {state.application?.position && (
-              <motion.div
-                className="px-4 py-2 bg-muted rounded-full"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.4 }}
-              >
-                <span className="text-sm font-medium text-muted-foreground">
-                  {state.application.position} Interview
-                </span>
-              </motion.div>
-            )}
-
-            {/* Settings Button */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.5 }}
-            >
-              <DeviceSettingsModal
-                onCameraChange={handleCameraChange}
-                onSpeakerChange={handleSpeakerChange}
-              >
-                <Button variant="outline" size="sm">
-                  <Settings className="w-4 h-4 mr-2" />
-                  Settings
-                </Button>
-              </DeviceSettingsModal>
-            </motion.div>
-          </motion.div>
-        </div>
-      </main>
-
-      {/* Self View */}
-      <SelfView selectedCameraId={selectedCameraId} />
+      </div>
     </div>
   );
 }

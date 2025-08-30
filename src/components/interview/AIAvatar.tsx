@@ -1,6 +1,6 @@
 import React from "react";
 import { motion } from "framer-motion";
-import { InterviewState } from "@/hooks/useInterviewSocket";
+import { InterviewState } from "@/hooks/useSimpleInterview";
 
 interface AIAvatarProps {
   interviewState: InterviewState;
@@ -14,14 +14,12 @@ export function AIAvatar({ interviewState, className = "" }: AIAvatarProps) {
         return "Connecting...";
       case "ready":
         return "Ready to begin";
-      case "aiSpeaking":
+      case "speaking":
         return "AI is speaking...";
       case "listening":
         return "Listening...";
-      case "sending":
-        return "Processing...";
-      case "waitingBackend":
-        return "Thinking...";
+      case "interviewing":
+        return "Interview in progress...";
       case "completed":
         return "Interview complete";
       case "error":
@@ -33,7 +31,7 @@ export function AIAvatar({ interviewState, className = "" }: AIAvatarProps) {
 
   const getStatusColor = () => {
     switch (interviewState) {
-      case "aiSpeaking":
+      case "speaking":
         return "text-brand";
       case "listening":
         return "text-success";
@@ -44,8 +42,8 @@ export function AIAvatar({ interviewState, className = "" }: AIAvatarProps) {
     }
   };
 
-  const isActive = interviewState === "aiSpeaking" || interviewState === "listening";
-  const isSpeaking = interviewState === "aiSpeaking";
+  const isActive = interviewState === "speaking" || interviewState === "listening";
+  const isSpeaking = interviewState === "speaking";
   const isListening = interviewState === "listening";
 
   return (
