@@ -1,16 +1,21 @@
 import { Building2 } from "lucide-react";
 import { Button } from "./ui/button";
 import ProgressBar from "./ProgressBar";
+import { useLocation } from "react-router-dom";
 
 interface AppShellProps {
   children: React.ReactNode;
 }
 
 export default function AppShell({ children }: AppShellProps) {
+  const location = useLocation();
+  const isInterviewPage = location.pathname === '/interview';
+  
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b border-border bg-background/95 backdrop-blur-sm sticky top-0 z-40">
+      {/* Header - Hidden during interview for clean UI */}
+      {!isInterviewPage && (
+        <header className="border-b border-border bg-background/95 backdrop-blur-sm sticky top-0 z-40">
         <div className="interview-container py-4">
           <div className="flex items-center justify-between">
             {/* Logo */}
@@ -37,14 +42,15 @@ export default function AppShell({ children }: AppShellProps) {
           </div>
         </div>
       </header>
+      )}
 
       {/* Main Content */}
-      <main className="pb-24">
+      <main className={isInterviewPage ? "" : "pb-24"}>
         {children}
       </main>
 
-      {/* Progress Bar */}
-      <ProgressBar />
+      {/* Progress Bar - Hidden during interview for clean UI */}
+      {!isInterviewPage && <ProgressBar />}
     </div>
   );
 }

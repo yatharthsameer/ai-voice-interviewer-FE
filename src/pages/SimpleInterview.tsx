@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Camera, Mic, Volume2, Square, Settings, Loader2, RefreshCw, Play } from 'lucide-react';
+import { Camera, Mic, Volume2, Square, Settings, Loader2, RefreshCw, Play, MicOff, VideoOff, Phone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -23,6 +23,8 @@ export default function SimpleInterview() {
   const [hasMicrophone, setHasMicrophone] = useState(false);
   const [videoStream, setVideoStream] = useState<MediaStream | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isVideoOff, setIsVideoOff] = useState(false);
   
   // Device selection state
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
@@ -414,14 +416,36 @@ export default function SimpleInterview() {
     }
   };
 
+  const toggleMute = () => {
+    setIsMuted(!isMuted);
+    // TODO: Implement actual mute functionality
+    if (videoStream) {
+      const audioTracks = videoStream.getAudioTracks();
+      audioTracks.forEach(track => {
+        track.enabled = isMuted; // Will be opposite after state update
+      });
+    }
+  };
+
+  const toggleVideo = () => {
+    setIsVideoOff(!isVideoOff);
+    // TODO: Implement actual video toggle functionality
+    if (videoStream) {
+      const videoTracks = videoStream.getVideoTracks();
+      videoTracks.forEach(track => {
+        track.enabled = isVideoOff; // Will be opposite after state update
+      });
+    }
+  };
+
   if (phase === 'deviceCheck') {
     return (
-      <div className="min-h-screen bg-background p-4">
+      <div className="bg-background p-4">
         <div className="max-w-4xl mx-auto">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="text-center mb-8"
+            className="text-center mb-4 md:mb-3"
           >
             <h1 className="text-3xl font-bold mb-2">Device Setup</h1>
             <p className="text-muted-foreground">
@@ -429,7 +453,7 @@ export default function SimpleInterview() {
             </p>
           </motion.div>
 
-          <div className="grid md:grid-cols-2 gap-8">
+          <div className="grid md:grid-cols-2 gap-6 md:gap-4">
             {/* Video Preview */}
             <Card>
               <CardHeader>
@@ -439,7 +463,7 @@ export default function SimpleInterview() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="aspect-video bg-muted rounded-lg overflow-hidden mb-4 relative">
+                <div className="aspect-video bg-muted rounded-lg overflow-hidden mb-3 md:mb-2 relative">
                   {videoStream ? (
                     <>
                       <video
@@ -498,7 +522,7 @@ export default function SimpleInterview() {
               <CardHeader>
                 <CardTitle>Device Settings</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-6">
+              <CardContent className="space-y-4 md:space-y-3">
                 {/* Camera Selection */}
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
@@ -550,7 +574,7 @@ export default function SimpleInterview() {
                   
                   {/* Microphone Level */}
                   {isTestingMic && (
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 -mt-1">
                       <Volume2 className="w-4 h-4 text-muted-foreground" />
                       <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
                         <motion.div
@@ -612,28 +636,28 @@ export default function SimpleInterview() {
                 </div>
 
                 {/* Status Checklist */}
-                <div className="space-y-3 pt-4 border-t">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-5 h-5 rounded-full flex items-center justify-center ${
+                <div className="space-y-2 pt-3 border-t">
+                  <div className="flex items-center gap-2">
+                    <div className={`w-4 h-4 rounded-full flex items-center justify-center ${
                       hasCamera ? 'bg-green-500' : 'bg-gray-300'
                     }`}>
-                      {hasCamera && <Camera className="w-3 h-3 text-white" />}
+                      {hasCamera && <Camera className="w-2.5 h-2.5 text-white" />}
                     </div>
                     <span className="text-sm">Camera access granted</span>
                   </div>
                   
-                  <div className="flex items-center gap-3">
-                    <div className={`w-5 h-5 rounded-full flex items-center justify-center ${
+                  <div className="flex items-center gap-2">
+                    <div className={`w-4 h-4 rounded-full flex items-center justify-center ${
                       hasMicrophone ? 'bg-green-500' : 'bg-gray-300'
                     }`}>
-                      {hasMicrophone && <Mic className="w-3 h-3 text-white" />}
+                      {hasMicrophone && <Mic className="w-2.5 h-2.5 text-white" />}
                     </div>
                     <span className="text-sm">Microphone access granted</span>
                   </div>
                   
-                  <div className="flex items-center gap-3">
-                    <div className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center">
-                      <Volume2 className="w-3 h-3 text-white" />
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 rounded-full bg-green-500 flex items-center justify-center">
+                      <Volume2 className="w-2.5 h-2.5 text-white" />
                     </div>
                     <span className="text-sm">Find a quiet environment</span>
                   </div>
@@ -646,22 +670,24 @@ export default function SimpleInterview() {
                   </AlertDescription>
                 </Alert>
 
-                <Button
-                  onClick={handleStartInterview}
-                  disabled={!hasCamera || !hasMicrophone}
-                  className="w-full h-12"
-                >
-                  Start Interview
-                </Button>
+                <div className="space-y-2 md:space-y-1.5">
+                  <Button
+                    onClick={handleStartInterview}
+                    disabled={!hasCamera || !hasMicrophone}
+                    className="w-full h-11"
+                  >
+                    Start Interview
+                  </Button>
 
-                <Button
-                  onClick={checkDevices}
-                  variant="outline"
-                  className="w-full"
-                >
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  Retry Device Check
-                </Button>
+                  <Button
+                    onClick={checkDevices}
+                    variant="outline"
+                    className="w-full h-9"
+                  >
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Retry Device Check
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -672,146 +698,204 @@ export default function SimpleInterview() {
 
   // Interview Phase
   return (
-    <div className="h-screen bg-background flex flex-col overflow-hidden">
-      {/* Header */}
-      <header className="border-b p-4 flex-shrink-0">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <h1 className="text-xl font-semibold">AI Interview</h1>
-            <div className={`text-sm ${getStateColor()}`}>
-              {getStateDisplay()}
-            </div>
-          </div>
-        </div>
-      </header>
+    <div className="fixed inset-0 bg-gradient-to-br from-gray-50 to-gray-100 flex flex-col overflow-hidden z-[9999]">
+      {/* Clean UI - No Header for distraction-free experience */}
 
-      {/* Main Interview Area */}
-      <main className="flex-1 flex flex-col justify-center p-4">
-        <div className="max-w-4xl mx-auto w-full">
-          <div className="flex flex-col items-center justify-center space-y-8">
+      {/* Main Interview Area - Google Meet Style */}
+      <main className="flex-1 flex flex-col justify-center items-center p-4 md:p-6 pb-32 md:pb-40">
+        <div className="flex flex-col items-center space-y-4 md:space-y-6 max-w-4xl mx-auto w-full">
             
-            {/* AI Avatar */}
+          {/* AI Avatar - Main Participant */}
+          <div className="relative">
             <motion.div
-              className="w-48 h-48 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center text-white text-6xl font-bold"
-              animate={{
-                scale: interviewState === 'speaking' ? [1, 1.05, 1] : 1,
-                boxShadow: interviewState === 'listening' 
-                  ? ['0 0 0 0 rgba(34, 197, 94, 0.4)', '0 0 0 20px rgba(34, 197, 94, 0)', '0 0 0 0 rgba(34, 197, 94, 0.4)']
-                  : '0 0 0 0 rgba(34, 197, 94, 0)'
-              }}
-              transition={{
-                duration: interviewState === 'speaking' ? 2 : 1.5,
-                repeat: interviewState === 'speaking' || interviewState === 'listening' ? Infinity : 0
-              }}
-            >
-              AI
-            </motion.div>
-
-            {/* Current Question */}
-            {currentQuestion && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="max-w-2xl text-center"
+              className="w-40 h-40 md:w-56 md:h-56 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center text-white text-5xl md:text-7xl font-bold shadow-2xl border-4 border-white/20"
+                animate={{
+                  scale: interviewState === 'speaking' ? [1, 1.05, 1] : 1,
+                }}
+                transition={{
+                  duration: interviewState === 'speaking' ? 2 : 1.5,
+                  repeat: interviewState === 'speaking' ? Infinity : 0
+                }}
               >
-                <p className="text-sm text-muted-foreground mb-2">
-                  Question {questionNumber}
-                </p>
-                <p className="text-lg leading-relaxed">
-                  {currentQuestion}
-                </p>
+                AI
               </motion.div>
-            )}
+              
+              {/* Listening Ring Animation */}
+              {interviewState === 'listening' && (
+                <motion.div
+                  className="absolute inset-0 rounded-full border-4 border-green-400"
+                  animate={{
+                    scale: [1, 1.2, 1],
+                    opacity: [0.8, 0.2, 0.8]
+                  }}
+                  transition={{
+                    duration: 2,
+                    repeat: Infinity,
+                    ease: "easeInOut"
+                  }}
+                />
+              )}
+              
+              {/* Speaking Ring Animation */}
+              {interviewState === 'speaking' && (
+                <motion.div
+                  className="absolute inset-0 rounded-full border-4 border-blue-400"
+                  animate={{
+                    scale: [1, 1.15, 1],
+                    opacity: [0.6, 0.1, 0.6]
+                  }}
+                  transition={{
+                    duration: 1.5,
+                    repeat: Infinity,
+                    ease: "easeInOut"
+                  }}
+                />
+              )}
+            </div>
 
-            {/* Connection Status */}
-            {interviewState === 'connecting' && (
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Connecting to interview service...</span>
-              </div>
-            )}
+          {/* Current Question - Centered Style */}
+          {currentQuestion && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="max-w-2xl md:max-w-4xl text-center px-4 md:px-8"
+            >
+              <p className="text-sm md:text-base text-purple-600 mb-2 md:mb-3 font-semibold">
+                Question {questionNumber}
+              </p>
+              <p className="text-xl md:text-2xl leading-relaxed text-gray-800 font-medium">
+                {currentQuestion}
+              </p>
+            </motion.div>
+          )}
 
-            {/* Auto-starting message */}
-            {interviewState === 'ready' && (
-              <div className="text-center">
-                <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
-                <p className="text-muted-foreground">Starting interview...</p>
-              </div>
-            )}
+          {/* Connection Status - Centered Style */}
+          {interviewState === 'connecting' && (
+            <div className="flex items-center gap-3 text-gray-600">
+              <Loader2 className="w-6 h-6 animate-spin" />
+              <span className="text-lg font-medium">Connecting to interview service...</span>
+            </div>
+          )}
+
+          {/* Auto-starting message - Centered Style */}
+          {interviewState === 'ready' && (
+            <div className="text-center">
+              <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3 text-purple-600" />
+              <p className="text-gray-600 text-lg font-medium">Starting interview...</p>
+            </div>
+          )}
 
 
 
 
 
-          </div>
         </div>
       </main>
 
-      {/* Bottom Controls */}
-      <footer className="border-t p-4 flex-shrink-0">
-        <div className="max-w-4xl mx-auto flex items-center justify-center gap-4">
-          <Button
-            variant="outline"
-            size="sm"
-            className="flex items-center gap-2"
+      {/* Google Meet-style Bottom Control Bar */}
+      <div className="absolute bottom-16 md:bottom-20 left-1/2 transform -translate-x-1/2 z-10">
+        <div className="bg-gray-900/95 backdrop-blur-md rounded-full px-6 py-4 md:px-10 md:py-5 flex items-center gap-4 md:gap-6 shadow-2xl border border-gray-700/40">
+          {/* Settings Button */}
+          <button
             onClick={() => setShowSettings(true)}
+            className="w-14 h-14 md:w-16 md:h-16 rounded-full bg-gray-700/80 hover:bg-gray-600/90 flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-lg backdrop-blur-sm border border-gray-600/30"
+            title="Settings"
           >
-            <Settings className="w-4 h-4" />
-            Settings
-          </Button>
+            <Settings className="w-6 h-6 md:w-7 md:h-7 text-white" />
+          </button>
           
-          <Button
-            onClick={endInterview}
-            variant="destructive"
-            size="sm"
-            className="flex items-center gap-2"
+          {/* Mute Button */}
+          <button
+            onClick={toggleMute}
+            className={`w-14 h-14 md:w-16 md:h-16 rounded-full flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-lg backdrop-blur-sm border ${
+              isMuted 
+                ? 'bg-red-600/90 hover:bg-red-500/90 border-red-500/30' 
+                : 'bg-gray-700/80 hover:bg-gray-600/90 border-gray-600/30'
+            }`}
+            title={isMuted ? 'Unmute' : 'Mute'}
           >
-            <Square className="w-4 h-4" />
-            End Interview
-          </Button>
+            {isMuted ? (
+              <MicOff className="w-6 h-6 md:w-7 md:h-7 text-white" />
+            ) : (
+              <Mic className="w-6 h-6 md:w-7 md:h-7 text-white" />
+            )}
+          </button>
+          
+          {/* Video Button */}
+          <button
+            onClick={toggleVideo}
+            className={`w-14 h-14 md:w-16 md:h-16 rounded-full flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-lg backdrop-blur-sm border ${
+              isVideoOff 
+                ? 'bg-red-600/90 hover:bg-red-500/90 border-red-500/30' 
+                : 'bg-gray-700/80 hover:bg-gray-600/90 border-gray-600/30'
+            }`}
+            title={isVideoOff ? 'Turn on camera' : 'Turn off camera'}
+          >
+            {isVideoOff ? (
+              <VideoOff className="w-6 h-6 md:w-7 md:h-7 text-white" />
+            ) : (
+              <Camera className="w-6 h-6 md:w-7 md:h-7 text-white" />
+            )}
+          </button>
+          
+          {/* End Interview Button */}
+          <button
+            onClick={endInterview}
+            className="w-14 h-14 md:w-16 md:h-16 rounded-full bg-red-600/90 hover:bg-red-500/90 flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-lg ring-2 ring-red-400/40 backdrop-blur-sm border border-red-500/30"
+            title="End Interview"
+          >
+            <Phone className="w-6 h-6 md:w-7 md:h-7 text-white transform rotate-[135deg]" />
+          </button>
         </div>
-      </footer>
+      </div>
 
-      {/* Video Preview */}
+      {/* Video Preview - Google Meet Style */}
       {videoStream && (
-        <div className="fixed bottom-24 right-4 w-48 h-36 bg-black rounded-lg overflow-hidden border-2 border-border shadow-lg">
-          <video
-            ref={interviewVideoRef}
-            autoPlay
-            muted
-            playsInline
-            className="w-full h-full object-cover"
-            style={{ backgroundColor: '#000' }}
-            onLoadedMetadata={() => {
-              console.log('Interview video metadata loaded');
-              // Ensure video plays when metadata is loaded
-              if (interviewVideoRef.current) {
-                interviewVideoRef.current.play().catch(console.error);
-              }
-            }}
-            onCanPlay={() => {
-              console.log('Interview video can play');
-            }}
-            onError={(e) => {
-              console.error('Interview video error:', e);
-            }}
-          />
-          <div className="absolute bottom-2 left-2 text-xs text-white bg-black/50 px-2 py-1 rounded">
-            You
-          </div>
-          {/* Recording indicator */}
-          <div className="absolute top-2 left-2">
-            <div className="flex items-center space-x-1">
-              <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-              <span className="text-xs text-white font-medium px-1 bg-black/50 rounded">
-                LIVE
-              </span>
+        <div className="absolute bottom-32 right-6 w-40 h-32 md:bottom-40 md:right-8 md:w-56 md:h-42 bg-black rounded-2xl overflow-hidden border-3 border-white/30 shadow-2xl backdrop-blur-sm">
+          {isVideoOff ? (
+            <div className="w-full h-full flex items-center justify-center bg-gray-800">
+              <div className="text-center">
+                <VideoOff className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                <span className="text-xs text-gray-400">Camera off</span>
+              </div>
             </div>
-          </div>
-          {/* Debug info */}
-          <div className="absolute top-2 right-2 bg-black/70 text-white text-xs px-1 py-0.5 rounded">
-            {videoStream.getVideoTracks().length > 0 ? 'Active' : 'No Track'}
-          </div>
+          ) : (
+            <>
+              <video
+                ref={interviewVideoRef}
+                autoPlay
+                muted
+                playsInline
+                className="w-full h-full object-cover"
+                style={{ backgroundColor: '#000' }}
+                onLoadedMetadata={() => {
+                  console.log('Interview video metadata loaded');
+                  // Ensure video plays when metadata is loaded
+                  if (interviewVideoRef.current) {
+                    interviewVideoRef.current.play().catch(console.error);
+                  }
+                }}
+                onCanPlay={() => {
+                  console.log('Interview video can play');
+                }}
+                onError={(e) => {
+                  console.error('Interview video error:', e);
+                }}
+              />
+              <div className="absolute bottom-3 left-3 text-sm text-white bg-black/80 px-3 py-1.5 rounded-lg font-medium backdrop-blur-sm">
+                You
+              </div>
+              {/* Recording indicator */}
+              <div className="absolute top-3 left-3">
+                <div className="flex items-center space-x-2">
+                  <div className="w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse" />
+                  <span className="text-sm text-white font-semibold px-2 py-1 bg-red-600/80 rounded-md backdrop-blur-sm">
+                    LIVE
+                  </span>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       )}
 
