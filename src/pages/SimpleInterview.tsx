@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Camera, Mic, Volume2, Square, Settings, Loader2 } from 'lucide-react';
+import { Camera, Mic, Volume2, Square, Settings, Loader2, RefreshCw, Play } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { useInterview } from '@/lib/store';
 import { useSimpleInterview, UserData } from '@/hooks/useSimpleInterview';
@@ -23,7 +24,22 @@ export default function SimpleInterview() {
   const [videoStream, setVideoStream] = useState<MediaStream | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   
+  // Device selection state
+  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedCamera, setSelectedCamera] = useState<string>('');
+  const [selectedMicrophone, setSelectedMicrophone] = useState<string>('');
+  const [selectedSpeaker, setSelectedSpeaker] = useState<string>('');
+  const [isTestingMic, setIsTestingMic] = useState(false);
+  const [isTestingSpeaker, setIsTestingSpeaker] = useState(false);
+  const [micLevel, setMicLevel] = useState(0);
+  
+  // Audio context refs for mic testing
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const micStreamRef = useRef<MediaStream | null>(null);
+  
   const videoRef = useRef<HTMLVideoElement>(null);
+  const interviewVideoRef = useRef<HTMLVideoElement>(null);
   
   const {
     state: interviewState,
@@ -53,11 +69,32 @@ export default function SimpleInterview() {
   useEffect(() => {
     checkDevices();
     return () => {
+      // Cleanup all streams and audio contexts
       if (videoStream) {
         videoStream.getTracks().forEach(track => track.stop());
       }
+      if (micStreamRef.current) {
+        micStreamRef.current.getTracks().forEach(track => track.stop());
+      }
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+      }
     };
   }, []);
+
+  const handleBeginInterview = useCallback(() => {
+    if (!appState.application || !isConnected) return;
+    
+    const userData: UserData = {
+      firstName: appState.application.firstName || '',
+      lastName: appState.application.lastName || '',
+      email: appState.application.email || '',
+      phone: appState.application.phone || '',
+      position: appState.application.position || ''
+    };
+    
+    startInterview(userData, 'general');
+  }, [appState.application, isConnected, startInterview]);
 
   // Connect WebSocket when moving to interview phase
   useEffect(() => {
@@ -67,22 +104,99 @@ export default function SimpleInterview() {
     }
   }, [phase, connect, disconnect]);
 
+  // Auto-start interview when connected and in interview phase
+  useEffect(() => {
+    if (phase === 'interview' && isConnected && interviewState === 'ready' && appState.application) {
+      // Automatically start the interview
+      handleBeginInterview();
+    }
+  }, [phase, isConnected, interviewState, appState.application, handleBeginInterview]);
+
+  // Ensure video element gets the stream when videoStream changes
+  useEffect(() => {
+    if (videoStream && videoRef.current) {
+      console.log('Effect: Setting video stream to element:', videoStream);
+      console.log('Video element:', videoRef.current);
+      console.log('Video tracks in stream:', videoStream.getVideoTracks());
+      
+      videoRef.current.srcObject = videoStream;
+      
+      // Force play and log result
+      videoRef.current.play()
+        .then(() => {
+          console.log('✅ Video playing successfully');
+        })
+        .catch((error) => {
+          console.error('❌ Video play failed:', error);
+        });
+    } else {
+      console.log('❌ Missing videoStream or videoRef:', { videoStream, videoRef: videoRef.current });
+    }
+  }, [videoStream]);
+
+  // Handle interview video element when phase changes to interview
+  useEffect(() => {
+    if (phase === 'interview' && videoStream && interviewVideoRef.current) {
+      console.log('Setting up interview video element with stream:', videoStream);
+      console.log('Interview video element:', interviewVideoRef.current);
+      console.log('Video tracks for interview:', videoStream.getVideoTracks());
+      
+      interviewVideoRef.current.srcObject = videoStream;
+      
+      // Force play and log result
+      interviewVideoRef.current.play()
+        .then(() => {
+          console.log('✅ Interview video playing successfully');
+        })
+        .catch((error) => {
+          console.error('❌ Interview video play failed:', error);
+        });
+    }
+  }, [phase, videoStream]);
+
   const checkDevices = async () => {
     try {
-      // Request camera and microphone access
+      console.log('🔍 Starting device check...');
+      
+      // Request camera and microphone access first
       const stream = await navigator.mediaDevices.getUserMedia({
         video: true,
         audio: true
       });
       
-      setVideoStream(stream);
-      setHasCamera(true);
-      setHasMicrophone(true);
+      console.log('📹 Got media stream:', stream);
+      console.log('📹 Video tracks:', stream.getVideoTracks());
+      console.log('🎤 Audio tracks:', stream.getAudioTracks());
       
-      // Display video preview
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
+      // Get available devices after permissions are granted
+      const deviceList = await navigator.mediaDevices.enumerateDevices();
+      console.log('🔌 Available devices:', deviceList);
+      setDevices(deviceList);
+      
+      // Filter devices by type
+      const cameras = deviceList.filter(device => device.kind === 'videoinput');
+      const microphones = deviceList.filter(device => device.kind === 'audioinput');
+      const speakers = deviceList.filter(device => device.kind === 'audiooutput');
+      
+      console.log('📷 Cameras found:', cameras);
+      console.log('🎤 Microphones found:', microphones);
+      console.log('🔊 Speakers found:', speakers);
+      
+      // Set default devices if not already selected
+      if (!selectedCamera && cameras.length > 0) {
+        setSelectedCamera(cameras[0].deviceId);
       }
+      if (!selectedMicrophone && microphones.length > 0) {
+        setSelectedMicrophone(microphones[0].deviceId);
+      }
+      if (!selectedSpeaker && speakers.length > 0) {
+        setSelectedSpeaker(speakers[0].deviceId);
+      }
+      
+      // Set stream and status
+      setVideoStream(stream);
+      setHasCamera(stream.getVideoTracks().length > 0);
+      setHasMicrophone(stream.getAudioTracks().length > 0);
       
       console.log('✅ Device permissions granted');
       
@@ -106,21 +220,152 @@ export default function SimpleInterview() {
       return;
     }
     
+    console.log('🚀 Starting interview with video stream:', videoStream);
+    console.log('📹 Video tracks before transition:', videoStream?.getVideoTracks());
+    
+    // Move to interview phase and auto-start
     setPhase('interview');
   };
 
-  const handleBeginInterview = () => {
-    if (!appState.application || !isConnected) return;
-    
-    const userData: UserData = {
-      firstName: appState.application.firstName || '',
-      lastName: appState.application.lastName || '',
-      email: appState.application.email || '',
-      phone: appState.application.phone || '',
-      position: appState.application.position || ''
-    };
-    
-    startInterview(userData, 'general');
+  const handleCameraChange = async (deviceId: string) => {
+    console.log('🔄 Changing camera to:', deviceId);
+    setSelectedCamera(deviceId);
+    try {
+      // Stop current video stream
+      if (videoStream) {
+        videoStream.getVideoTracks().forEach(track => track.stop());
+      }
+      
+      // Get new video stream with selected camera
+      const newStream = await navigator.mediaDevices.getUserMedia({
+        video: { deviceId: { exact: deviceId } },
+        audio: false
+      });
+      
+      console.log('📹 New camera stream:', newStream);
+      
+      // Combine with existing audio tracks if any
+      const audioTracks = videoStream?.getAudioTracks() || [];
+      const combinedStream = new MediaStream([
+        ...newStream.getVideoTracks(),
+        ...audioTracks
+      ]);
+      
+      console.log('🔗 Combined stream:', combinedStream);
+      setVideoStream(combinedStream);
+      
+      // Update video element
+      if (videoRef.current) {
+        console.log('Updating video with new stream:', combinedStream);
+        console.log('New video tracks:', combinedStream.getVideoTracks());
+        videoRef.current.srcObject = combinedStream;
+        videoRef.current.play().catch(console.error);
+      }
+      
+      setHasCamera(true);
+      
+    } catch (error) {
+      console.error('Failed to change camera:', error);
+      toast({
+        title: 'Camera Error',
+        description: 'Failed to switch to selected camera.',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const testMicrophone = async () => {
+    if (isTestingMic) {
+      // Stop testing
+      setIsTestingMic(false);
+      if (micStreamRef.current) {
+        micStreamRef.current.getTracks().forEach(track => track.stop());
+        micStreamRef.current = null;
+      }
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+        audioContextRef.current = null;
+      }
+      setMicLevel(0);
+      return;
+    }
+
+    try {
+      setIsTestingMic(true);
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { deviceId: { exact: selectedMicrophone } },
+        video: false,
+      });
+
+      micStreamRef.current = stream;
+      audioContextRef.current = new AudioContext();
+      analyserRef.current = audioContextRef.current.createAnalyser();
+      const source = audioContextRef.current.createMediaStreamSource(stream);
+      source.connect(analyserRef.current);
+
+      analyserRef.current.fftSize = 256;
+      const bufferLength = analyserRef.current.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+
+      const updateMicLevel = () => {
+        if (!isTestingMic) return;
+        
+        analyserRef.current?.getByteFrequencyData(dataArray);
+        const average = dataArray.reduce((a, b) => a + b) / bufferLength;
+        setMicLevel(Math.min(100, (average / 128) * 100));
+        requestAnimationFrame(updateMicLevel);
+      };
+
+      updateMicLevel();
+
+    } catch (error) {
+      console.error('Failed to test microphone:', error);
+      setIsTestingMic(false);
+      toast({
+        title: 'Microphone Error',
+        description: 'Failed to access the selected microphone.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const testSpeaker = async () => {
+    setIsTestingSpeaker(true);
+    try {
+      // Create a test tone
+      const audioContext = new AudioContext();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+
+      oscillator.frequency.value = 440; // A4 note
+      gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 1);
+
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(audioContext.currentTime + 1);
+
+      setTimeout(() => {
+        setIsTestingSpeaker(false);
+        audioContext.close();
+      }, 1000);
+
+      toast({
+        title: 'Test Sound Played',
+        description: 'Did you hear the test sound? If not, try adjusting your speaker settings.',
+      });
+
+    } catch (error) {
+      console.error('Failed to test speaker:', error);
+      setIsTestingSpeaker(false);
+      toast({
+        title: 'Speaker Error',
+        description: 'Failed to play test sound.',
+        variant: 'destructive',
+      });
+    }
   };
 
   const handleDeviceChange = (newStream: MediaStream) => {
@@ -135,6 +380,7 @@ export default function SimpleInterview() {
     // Update video element
     if (videoRef.current) {
       videoRef.current.srcObject = newStream;
+      videoRef.current.play().catch(console.error);
     }
     
     // Check if devices are working
@@ -193,14 +439,38 @@ export default function SimpleInterview() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="aspect-video bg-muted rounded-lg overflow-hidden mb-4">
+                <div className="aspect-video bg-muted rounded-lg overflow-hidden mb-4 relative">
                   {videoStream ? (
-                    <video
-                      ref={videoRef}
-                      autoPlay
-                      muted
-                      className="w-full h-full object-cover"
-                    />
+                    <>
+                      <video
+                        ref={videoRef}
+                        autoPlay
+                        muted
+                        playsInline
+                        className="w-full h-full object-cover"
+                        style={{ backgroundColor: '#000' }}
+                        onLoadedMetadata={() => {
+                          console.log('Video metadata loaded');
+                          // Ensure video plays when metadata is loaded
+                          if (videoRef.current) {
+                            videoRef.current.play().catch(console.error);
+                          }
+                        }}
+                        onCanPlay={() => {
+                          console.log('Video can play');
+                        }}
+                        onError={(e) => {
+                          console.error('Video error:', e);
+                        }}
+                        onLoadStart={() => {
+                          console.log('Video load start');
+                        }}
+                      />
+                      {/* Debug overlay */}
+                      <div className="absolute top-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
+                        {videoStream.getVideoTracks().length > 0 ? 'Stream Active' : 'No Video Track'}
+                      </div>
+                    </>
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
                       <Camera className="w-12 h-12 text-muted-foreground" />
@@ -223,13 +493,126 @@ export default function SimpleInterview() {
               </CardContent>
             </Card>
 
-            {/* Device Checklist */}
+            {/* Device Settings & Checklist */}
             <Card>
               <CardHeader>
-                <CardTitle>Ready to Start?</CardTitle>
+                <CardTitle>Device Settings</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-3">
+              <CardContent className="space-y-6">
+                {/* Camera Selection */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Camera className="w-4 h-4" />
+                    <span className="text-sm font-medium">Camera</span>
+                  </div>
+                  <Select value={selectedCamera} onValueChange={handleCameraChange}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select camera" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {devices.filter(d => d.kind === 'videoinput').map((device) => (
+                        <SelectItem key={device.deviceId} value={device.deviceId}>
+                          {device.label || `Camera ${device.deviceId.slice(-4)}`}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Microphone Selection & Test */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Mic className="w-4 h-4" />
+                    <span className="text-sm font-medium">Microphone</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <Select value={selectedMicrophone} onValueChange={setSelectedMicrophone}>
+                      <SelectTrigger className="flex-1">
+                        <SelectValue placeholder="Select microphone" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {devices.filter(d => d.kind === 'audioinput').map((device) => (
+                          <SelectItem key={device.deviceId} value={device.deviceId}>
+                            {device.label || `Microphone ${device.deviceId.slice(-4)}`}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={testMicrophone}
+                      className={isTestingMic ? "bg-green-500 text-white" : ""}
+                    >
+                      {isTestingMic ? "Stop" : "Test"}
+                    </Button>
+                  </div>
+                  
+                  {/* Microphone Level */}
+                  {isTestingMic && (
+                    <div className="flex items-center gap-2">
+                      <Volume2 className="w-4 h-4 text-muted-foreground" />
+                      <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                        <motion.div
+                          className="h-full bg-green-500"
+                          style={{ width: `${micLevel}%` }}
+                          transition={{ duration: 0.1 }}
+                        />
+                      </div>
+                      <span className="text-xs text-muted-foreground w-8 text-right">
+                        {Math.round(micLevel)}%
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Speaker Selection & Test */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Volume2 className="w-4 h-4" />
+                    <span className="text-sm font-medium">Speaker</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <Select value={selectedSpeaker} onValueChange={setSelectedSpeaker}>
+                      <SelectTrigger className="flex-1">
+                        <SelectValue placeholder="Select speaker" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {devices.filter(d => d.kind === 'audiooutput').map((device) => (
+                          <SelectItem key={device.deviceId} value={device.deviceId}>
+                            {device.label || `Speaker ${device.deviceId.slice(-4)}`}
+                          </SelectItem>
+                        ))}
+                        {devices.filter(d => d.kind === 'audiooutput').length === 0 && (
+                          <SelectItem value="default" disabled>
+                            Default Speaker (Browser controlled)
+                          </SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={testSpeaker}
+                      disabled={isTestingSpeaker}
+                    >
+                      {isTestingSpeaker ? (
+                        <>
+                          <Play className="w-3 h-3 mr-1 animate-pulse" />
+                          Playing
+                        </>
+                      ) : (
+                        <>
+                          <Play className="w-3 h-3 mr-1" />
+                          Test
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Status Checklist */}
+                <div className="space-y-3 pt-4 border-t">
                   <div className="flex items-center gap-3">
                     <div className={`w-5 h-5 rounded-full flex items-center justify-center ${
                       hasCamera ? 'bg-green-500' : 'bg-gray-300'
@@ -276,6 +659,7 @@ export default function SimpleInterview() {
                   variant="outline"
                   className="w-full"
                 >
+                  <RefreshCw className="w-4 h-4 mr-2" />
                   Retry Device Check
                 </Button>
               </CardContent>
@@ -347,15 +731,12 @@ export default function SimpleInterview() {
               </div>
             )}
 
-            {/* Ready to Start */}
+            {/* Auto-starting message */}
             {interviewState === 'ready' && (
-              <Button
-                onClick={handleBeginInterview}
-                size="lg"
-                className="px-8"
-              >
-                Begin Interview
-              </Button>
+              <div className="text-center">
+                <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
+                <p className="text-muted-foreground">Starting interview...</p>
+              </div>
             )}
 
 
@@ -395,13 +776,41 @@ export default function SimpleInterview() {
       {videoStream && (
         <div className="fixed bottom-24 right-4 w-48 h-36 bg-black rounded-lg overflow-hidden border-2 border-border shadow-lg">
           <video
-            ref={videoRef}
+            ref={interviewVideoRef}
             autoPlay
             muted
+            playsInline
             className="w-full h-full object-cover"
+            style={{ backgroundColor: '#000' }}
+            onLoadedMetadata={() => {
+              console.log('Interview video metadata loaded');
+              // Ensure video plays when metadata is loaded
+              if (interviewVideoRef.current) {
+                interviewVideoRef.current.play().catch(console.error);
+              }
+            }}
+            onCanPlay={() => {
+              console.log('Interview video can play');
+            }}
+            onError={(e) => {
+              console.error('Interview video error:', e);
+            }}
           />
           <div className="absolute bottom-2 left-2 text-xs text-white bg-black/50 px-2 py-1 rounded">
             You
+          </div>
+          {/* Recording indicator */}
+          <div className="absolute top-2 left-2">
+            <div className="flex items-center space-x-1">
+              <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+              <span className="text-xs text-white font-medium px-1 bg-black/50 rounded">
+                LIVE
+              </span>
+            </div>
+          </div>
+          {/* Debug info */}
+          <div className="absolute top-2 right-2 bg-black/70 text-white text-xs px-1 py-0.5 rounded">
+            {videoStream.getVideoTracks().length > 0 ? 'Active' : 'No Track'}
           </div>
         </div>
       )}

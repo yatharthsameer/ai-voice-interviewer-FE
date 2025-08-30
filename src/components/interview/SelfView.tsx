@@ -47,6 +47,7 @@ export function SelfView({ selectedCameraId, className = "" }: SelfViewProps) {
         console.error("Failed to access camera:", error);
         if (mounted) {
           setHasError(true);
+          setStream(null);
         }
       }
     };
@@ -106,6 +107,12 @@ export function SelfView({ selectedCameraId, className = "" }: SelfViewProps) {
               muted
               playsInline
               className="w-full h-full object-cover"
+              onLoadedMetadata={() => {
+                // Ensure video plays when metadata is loaded
+                if (videoRef.current) {
+                  videoRef.current.play().catch(console.error);
+                }
+              }}
             />
             
             {/* Recording indicator */}
