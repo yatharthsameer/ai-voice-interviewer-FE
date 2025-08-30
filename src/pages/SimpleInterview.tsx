@@ -566,7 +566,7 @@ export default function SimpleInterview() {
                       variant="outline"
                       size="sm"
                       onClick={testMicrophone}
-                      className={isTestingMic ? "bg-green-500 text-white" : ""}
+                      className={`h-7 px-2 text-xs ${isTestingMic ? "bg-green-500 text-white" : ""}`}
                     >
                       {isTestingMic ? "Stop" : "Test"}
                     </Button>
@@ -619,15 +619,16 @@ export default function SimpleInterview() {
                       size="sm"
                       onClick={testSpeaker}
                       disabled={isTestingSpeaker}
+                      className="h-7 px-2 text-xs"
                     >
                       {isTestingSpeaker ? (
-                        <>
-                          <Play className="w-3 h-3 mr-1 animate-pulse" />
+                                                <>  
+                          <Play className="w-2.5 h-2.5 mr-1 animate-pulse" />
                           Playing
                         </>
                       ) : (
-                        <>
-                          <Play className="w-3 h-3 mr-1" />
+                                                <>  
+                          <Play className="w-2.5 h-2.5 mr-1" />
                           Test
                         </>
                       )}
@@ -674,7 +675,7 @@ export default function SimpleInterview() {
                   <Button
                     onClick={handleStartInterview}
                     disabled={!hasCamera || !hasMicrophone}
-                    className="w-full h-11"
+                    className="w-full h-9"
                   >
                     Start Interview
                   </Button>
@@ -682,9 +683,9 @@ export default function SimpleInterview() {
                   <Button
                     onClick={checkDevices}
                     variant="outline"
-                    className="w-full h-9"
+                    className="w-full h-8"
                   >
-                    <RefreshCw className="w-4 h-4 mr-2" />
+                    <RefreshCw className="w-3.5 h-3.5 mr-2" />
                     Retry Device Check
                   </Button>
                 </div>
@@ -794,20 +795,20 @@ export default function SimpleInterview() {
 
       {/* Google Meet-style Bottom Control Bar */}
       <div className="absolute bottom-16 md:bottom-20 left-1/2 transform -translate-x-1/2 z-10">
-        <div className="bg-gray-900/95 backdrop-blur-md rounded-full px-6 py-4 md:px-10 md:py-5 flex items-center gap-4 md:gap-6 shadow-2xl border border-gray-700/40">
+        <div className="bg-gray-900/95 backdrop-blur-md rounded-full px-4 py-3 md:px-6 md:py-3.5 flex items-center gap-3 md:gap-4 shadow-2xl border border-gray-700/40">
           {/* Settings Button */}
           <button
             onClick={() => setShowSettings(true)}
-            className="w-14 h-14 md:w-16 md:h-16 rounded-full bg-gray-700/80 hover:bg-gray-600/90 flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-lg backdrop-blur-sm border border-gray-600/30"
+            className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-gray-700/80 hover:bg-gray-600/90 flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-lg backdrop-blur-sm border border-gray-600/30"
             title="Settings"
           >
-            <Settings className="w-6 h-6 md:w-7 md:h-7 text-white" />
+            <Settings className="w-4 h-4 md:w-5 md:h-5 text-white" />
           </button>
           
           {/* Mute Button */}
           <button
             onClick={toggleMute}
-            className={`w-14 h-14 md:w-16 md:h-16 rounded-full flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-lg backdrop-blur-sm border ${
+            className={`w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-lg backdrop-blur-sm border ${
               isMuted 
                 ? 'bg-red-600/90 hover:bg-red-500/90 border-red-500/30' 
                 : 'bg-gray-700/80 hover:bg-gray-600/90 border-gray-600/30'
@@ -815,16 +816,16 @@ export default function SimpleInterview() {
             title={isMuted ? 'Unmute' : 'Mute'}
           >
             {isMuted ? (
-              <MicOff className="w-6 h-6 md:w-7 md:h-7 text-white" />
+              <MicOff className="w-4 h-4 md:w-5 md:h-5 text-white" />
             ) : (
-              <Mic className="w-6 h-6 md:w-7 md:h-7 text-white" />
+              <Mic className="w-4 h-4 md:w-5 md:h-5 text-white" />
             )}
           </button>
           
           {/* Video Button */}
           <button
             onClick={toggleVideo}
-            className={`w-14 h-14 md:w-16 md:h-16 rounded-full flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-lg backdrop-blur-sm border ${
+            className={`w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-lg backdrop-blur-sm border ${
               isVideoOff 
                 ? 'bg-red-600/90 hover:bg-red-500/90 border-red-500/30' 
                 : 'bg-gray-700/80 hover:bg-gray-600/90 border-gray-600/30'
@@ -832,19 +833,19 @@ export default function SimpleInterview() {
             title={isVideoOff ? 'Turn on camera' : 'Turn off camera'}
           >
             {isVideoOff ? (
-              <VideoOff className="w-6 h-6 md:w-7 md:h-7 text-white" />
+              <VideoOff className="w-4 h-4 md:w-5 md:h-5 text-white" />
             ) : (
-              <Camera className="w-6 h-6 md:w-7 md:h-7 text-white" />
+              <Camera className="w-4 h-4 md:w-5 md:h-5 text-white" />
             )}
           </button>
           
           {/* End Interview Button */}
           <button
             onClick={endInterview}
-            className="w-14 h-14 md:w-16 md:h-16 rounded-full bg-red-600/90 hover:bg-red-500/90 flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-lg ring-2 ring-red-400/40 backdrop-blur-sm border border-red-500/30"
+            className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-red-600/90 hover:bg-red-500/90 flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-lg ring-2 ring-red-400/40 backdrop-blur-sm border border-red-500/30"
             title="End Interview"
           >
-            <Phone className="w-6 h-6 md:w-7 md:h-7 text-white transform rotate-[135deg]" />
+            <Phone className="w-4 h-4 md:w-5 md:h-5 text-white transform rotate-[135deg]" />
           </button>
         </div>
       </div>
